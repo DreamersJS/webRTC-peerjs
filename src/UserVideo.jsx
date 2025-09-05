@@ -1,12 +1,13 @@
-import { useEffect, useRef } from "react";
+// UserVideo.jsx
+import { useEffect } from "react";
 
-export default function UserVideo({ videoRef, stream }) {
+export default function UserVideo({ videoRef, streamRef }) {
   useEffect(() => {
-    if (stream?.current && videoRef?.current) {
-      videoRef.current.srcObject = stream.current;
-      console.log("🔹 Local stream attached to UserVideo", stream.current);
+    if (streamRef?.current && videoRef?.current) {
+      videoRef.current.srcObject = streamRef.current;
+      console.log("🔹 Local stream attached", streamRef.current);
     }
-  }, [stream, videoRef]);
+  }, [streamRef, videoRef]);
 
   return (
     <video

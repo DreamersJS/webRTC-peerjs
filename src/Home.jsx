@@ -1,3 +1,4 @@
+// Home.jsx
 import React, { useContext, useEffect, useRef, useState } from "react";
 import Peer from "peerjs";
 import { AppContext } from "./login/AppContext";
@@ -16,59 +17,64 @@ export default function Home() {
   const [incomingCall, setIncomingCall] = useState(null);
 
   const localStreamRef = useRef(null);
-  const remoteVideoRef = useRef(null);
+  const remoteStreamRef = useRef(null);
   const userVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
 
-  // Initialize PeerJS for this user
+  // Initialize PeerJS
   useEffect(() => {
     if (!user) return;
 
     const p = new Peer(user.uid, {
       host: "localhost",
       port: 9000,
-      path: "/"
+      path: "/",
     });
 
-    p.on("open", id => {
-      console.log("Connected to PeerServer with id:", id);
+    p.on("open", (id) => {
+      console.log("🔹 Connected to PeerServer with id:", id);
     });
 
-    // Listen for incoming calls
     p.on("call", (call) => {
-      console.log("Incoming call from:", call.peer);
+      console.log("🔹 Incoming call from:", call.peer);
       setIncomingCall({
         call,
         callerId: call.peer,
-        callerName: call.metadata?.username || call.peer
+        callerName: call.metadata?.username || call.peer,
       });
     });
 
     setPeer(p);
-
-    return () => p.destroy();
+    return () => {
+      console.log("🔹 Destroying Peer instance");
+      p.destroy();
+    };
   }, [user]);
 
-  // Start a call
+  // Start call (caller)
   const handleStartCall = async ({ id, username }) => {
     if (!peer) return;
 
     try {
       console.log("🔹 Starting call to", username, id);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       localStreamRef.current = stream;
+
+      if (userVideoRef.current) userVideoRef.current.srcObject = stream;
 
       const call = peer.call(id, stream, { metadata: { username: user.username } });
 
-      // When remote stream arrives, modal should disappear
-      call.on("stream", remoteStream => {
-        console.log("🔹 Remote stream received from", id);
+      call.on("stream", (remoteStream) => {
+        console.log("🔹 Remote stream received from", id, remoteStream);
+        remoteStreamRef.current = remoteStream;
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
-
-        // Close caller modal automatically
-        setIsCalling(false);
+        setIsCalling(false); // close caller modal
       });
 
-      // Log call events
       call.on("close", () => {
         console.log("🔹 Call closed by remote peer");
         handleEndCall();
@@ -86,22 +92,26 @@ export default function Home() {
     }
   };
 
-  // Accept incoming call
+  // Accept call (callee)
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
 
     try {
       console.log("🔹 Accepting call from", incomingCall.callerId);
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       localStreamRef.current = stream;
 
-      // Answer the call using the call object from incomingCall
+      if (userVideoRef.current) userVideoRef.current.srcObject = stream;
+
       incomingCall.call.answer(stream);
 
-      // Attach remote stream
       incomingCall.call.on("stream", (remoteStream) => {
         console.log("🔹 Received remote stream from caller", remoteStream);
+        remoteStreamRef.current = remoteStream;
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
       });
 
@@ -115,11 +125,6 @@ export default function Home() {
         handleEndCall();
       });
 
-      // Show local video
-      if (userVideoRef.current) {
-        userVideoRef.current.srcObject = stream;
-      }
-
       setIsCalling(true);
       setIncomingCall(null);
     } catch (err) {
@@ -127,21 +132,23 @@ export default function Home() {
     }
   };
 
-
   const handleRejectCall = () => {
+    console.log("🔹 Call rejected");
     setIncomingCall(null);
   };
 
-  // End call
   const handleEndCall = () => {
+    console.log("🔹 Ending call");
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+    if (remoteStreamRef.current && remoteVideoRef.current)
+      remoteVideoRef.current.srcObject = null;
+
     setIsCalling(false);
     setSelectedUser(null);
     setIncomingCall(null);
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   };
 
   return (
@@ -149,18 +156,12 @@ export default function Home() {
       <Login />
       <p>Hello {user?.username}!</p>
 
-      {/* User list to call */}
       <ListUsers onCall={handleStartCall} selectedUser={selectedUser} />
 
-      {/* Caller modal */}
       {isCalling && selectedUser && (
-        <ModalCallerCalling
-          callee={selectedUser.username}
-          onCancel={handleEndCall}
-        />
+        <ModalCallerCalling callee={selectedUser.username} onCancel={handleEndCall} />
       )}
 
-      {/* Callee modal */}
       {incomingCall && (
         <ModalCallee
           callData={incomingCall}
@@ -169,10 +170,9 @@ export default function Home() {
         />
       )}
 
-      {/* Video display */}
       <div className="flex gap-4 mt-4">
-        <UserVideo videoRef={userVideoRef} stream={localStreamRef} />
-        <RemoteVideo videoRef={remoteVideoRef} />
+        <UserVideo videoRef={userVideoRef} streamRef={localStreamRef} />
+        <RemoteVideo videoRef={remoteVideoRef} streamRef={remoteStreamRef} />
       </div>
 
       {isCalling && (
@@ -186,17 +186,3 @@ export default function Home() {
     </div>
   );
 }
-
-/**Peer instance in any React component
- * 
-Each React user (client) creates their own Peer instance.
-
-This Peer instance represents that single user in the WebRTC network.
-
-It connects to the single PeerServer (localhost:9000).
-
-So if 3 users are online:
-
-1 PeerServer running on port 9000
-3 separate Peer instances (one per logged-in user) connecting to the server
- */
