@@ -17,6 +17,7 @@ export default function Home() {
 
   const localStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const userVideoRef = useRef(null);
 
   // Initialize PeerJS for this user
   useEffect(() => {
@@ -52,19 +53,36 @@ export default function Home() {
     if (!peer) return;
 
     try {
+      console.log("🔹 Starting call to", username, id);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStreamRef.current = stream;
 
       const call = peer.call(id, stream, { metadata: { username: user.username } });
 
+      // When remote stream arrives, modal should disappear
       call.on("stream", remoteStream => {
+        console.log("🔹 Remote stream received from", id);
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+
+        // Close caller modal automatically
+        setIsCalling(false);
+      });
+
+      // Log call events
+      call.on("close", () => {
+        console.log("🔹 Call closed by remote peer");
+        handleEndCall();
+      });
+
+      call.on("error", (err) => {
+        console.error("🔹 Call error:", err);
+        handleEndCall();
       });
 
       setSelectedUser({ id, username });
       setIsCalling(true);
     } catch (err) {
-      console.error("Error starting call:", err);
+      console.error("🔹 Error starting call:", err);
     }
   };
 
@@ -73,21 +91,42 @@ export default function Home() {
     if (!incomingCall) return;
 
     try {
+      console.log("🔹 Accepting call from", incomingCall.callerId);
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStreamRef.current = stream;
 
+      // Answer the call using the call object from incomingCall
       incomingCall.call.answer(stream);
 
-      incomingCall.call.on("stream", remoteStream => {
+      // Attach remote stream
+      incomingCall.call.on("stream", (remoteStream) => {
+        console.log("🔹 Received remote stream from caller", remoteStream);
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
       });
+
+      incomingCall.call.on("close", () => {
+        console.log("🔹 Caller ended the call");
+        handleEndCall();
+      });
+
+      incomingCall.call.on("error", (err) => {
+        console.error("🔹 Call error:", err);
+        handleEndCall();
+      });
+
+      // Show local video
+      if (userVideoRef.current) {
+        userVideoRef.current.srcObject = stream;
+      }
 
       setIsCalling(true);
       setIncomingCall(null);
     } catch (err) {
-      console.error("Error answering call:", err);
+      console.error("🔹 Error answering call:", err);
     }
   };
+
 
   const handleRejectCall = () => {
     setIncomingCall(null);
@@ -107,7 +146,7 @@ export default function Home() {
 
   return (
     <div className="p-4">
-<Login />
+      <Login />
       <p>Hello {user?.username}!</p>
 
       {/* User list to call */}
@@ -132,7 +171,7 @@ export default function Home() {
 
       {/* Video display */}
       <div className="flex gap-4 mt-4">
-        <UserVideo streamRef={localStreamRef} />
+        <UserVideo videoRef={userVideoRef} stream={localStreamRef} />
         <RemoteVideo videoRef={remoteVideoRef} />
       </div>
 
