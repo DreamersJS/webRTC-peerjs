@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import Peer from "peerjs";
 import { AppContext } from "./login/AppContext";
 import UserVideo from "./UserVideo";
 import RemoteVideo from "./RemoteVideo";
@@ -6,54 +7,47 @@ import ListUsers from "./ListUsers";
 import ModalCallerCalling from "./ModalCallerCalling";
 import ModalCallee from "./ModalCallee";
 import { Login } from "./login/Login";
-import Peer from "peerjs";
 
-// login and store userData in context
-// Hello {user.username}
-// list of users + button to select user to call
-// on click of button, start call with that user, popup modal Calling Marty... Cancel call button
-// other user gets popup modal Incoming call from Andy Accept/Reject buttons
-// on accept, join call- both users see video call screen
 export default function Home() {
   const { user } = useContext(AppContext);
-  // caller is calling selected user
-  const [isCalling, setIsCalling] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  // callee has incoming call from caller
-  const [incomingCall, setIncomingCall] = useState(null); // { callId, callerId, callerName }
-  // Add activeCall state to track if user is already in a call. Reject new calls automatically or queue them.
-
-  // Peer instance & connect to the PeerServer
   const [peer, setPeer] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [isCalling, setIsCalling] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(null);
+
   const localStreamRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
+  // Initialize PeerJS for this user
   useEffect(() => {
     if (!user) return;
 
-    peer = new Peer(user.uid, {
+    const p = new Peer(user.uid, {
       host: "localhost",
       port: 9000,
-      path: "/",
+      path: "/"
     });
 
-    peer.on("open", id => {
+    p.on("open", id => {
       console.log("Connected to PeerServer with id:", id);
     });
 
-    setPeer(peer);
+    // Listen for incoming calls
+    p.on("call", (call) => {
+      console.log("Incoming call from:", call.peer);
+      setIncomingCall({
+        call,
+        callerId: call.peer,
+        callerName: call.metadata?.username || call.peer
+      });
+    });
 
-    return () => peer.destroy();
+    setPeer(p);
+
+    return () => p.destroy();
   }, [user]);
 
-
-  // useEffect(() => {
-  // if (user) {
-  //   console.log({user});
-  // }
-  // }, [user]);
-
-
+  // Start a call
   const handleStartCall = async ({ id, username }) => {
     if (!peer) return;
 
@@ -64,9 +58,7 @@ export default function Home() {
       const call = peer.call(id, stream, { metadata: { username: user.username } });
 
       call.on("stream", remoteStream => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
       });
 
       setSelectedUser({ id, username });
@@ -76,6 +68,7 @@ export default function Home() {
     }
   };
 
+  // Accept incoming call
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
 
@@ -86,9 +79,7 @@ export default function Home() {
       incomingCall.call.answer(stream);
 
       incomingCall.call.on("stream", remoteStream => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
       });
 
       setIsCalling(true);
@@ -102,11 +93,7 @@ export default function Home() {
     setIncomingCall(null);
   };
 
-
-  const handleJoinCall = async () => {
-
-  }
-
+  // End call
   const handleEndCall = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -115,35 +102,48 @@ export default function Home() {
     setIsCalling(false);
     setSelectedUser(null);
     setIncomingCall(null);
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
   };
 
-
   return (
-    <div >
-      <Login />
+    <div className="p-4">
+<Login />
       <p>Hello {user?.username}!</p>
 
-      <ListUsers
-        onCall={handleStartCall}
-        selectedUser={selectedUser}
-      />
+      {/* User list to call */}
+      <ListUsers onCall={handleStartCall} selectedUser={selectedUser} />
 
-      {isCalling && selectedUser &&
+      {/* Caller modal */}
+      {isCalling && selectedUser && (
         <ModalCallerCalling
           callee={selectedUser.username}
-          onCancel={handleEndCall} />}
+          onCancel={handleEndCall}
+        />
+      )}
 
-      {incomingCall && <ModalCallee
-         callData={incomingCall}
-         onAccept={handleAcceptCall}
-         onReject={handleRejectCall}
-      />}
+      {/* Callee modal */}
+      {incomingCall && (
+        <ModalCallee
+          callData={incomingCall}
+          onAccept={handleAcceptCall}
+          onReject={handleRejectCall}
+        />
+      )}
 
-      <div className="flex gap-4">
+      {/* Video display */}
+      <div className="flex gap-4 mt-4">
         <UserVideo streamRef={localStreamRef} />
         <RemoteVideo videoRef={remoteVideoRef} />
-        {isCalling && <button onClick={handleEndCall}>End call</button>}
       </div>
+
+      {isCalling && (
+        <button
+          className="mt-4 p-2 bg-red-500 text-white rounded"
+          onClick={handleEndCall}
+        >
+          End Call
+        </button>
+      )}
     </div>
   );
 }
