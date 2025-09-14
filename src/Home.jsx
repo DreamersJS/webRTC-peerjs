@@ -8,6 +8,7 @@ import ListUsers from "./ListUsers";
 import ModalCallerCalling from "./ModalCallerCalling";
 import ModalCallee from "./ModalCallee";
 import { Login } from "./login/Login";
+import DebugLog from "./DebugLog";
 
 export default function Home() {
   const { user } = useContext(AppContext);
@@ -15,6 +16,7 @@ export default function Home() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [isCalling, setIsCalling] = useState(false);
   const [incomingCall, setIncomingCall] = useState(null);
+const [activeCall, setActiveCall] = useState(false);
 
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -113,6 +115,8 @@ export default function Home() {
         console.log("🔹 Received remote stream from caller", remoteStream);
         remoteStreamRef.current = remoteStream;
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+setActiveCall(true); // <-- new state
+  setIsCalling(false); // modal can close
       });
 
       incomingCall.call.on("close", () => {
@@ -146,7 +150,8 @@ export default function Home() {
     if (remoteStreamRef.current && remoteVideoRef.current)
       remoteVideoRef.current.srcObject = null;
 
-    setIsCalling(false);
+    setActiveCall(false);
+setIsCalling(false);
     setSelectedUser(null);
     setIncomingCall(null);
   };
@@ -175,7 +180,7 @@ export default function Home() {
         <RemoteVideo videoRef={remoteVideoRef} streamRef={remoteStreamRef} />
       </div>
 
-      {isCalling && (
+      {activeCall && (
         <button
           className="mt-4 p-2 bg-red-500 text-white rounded"
           onClick={handleEndCall}
@@ -183,6 +188,7 @@ export default function Home() {
           End Call
         </button>
       )}
+      <DebugLog />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import Peer from "peerjs";
 
 // On login (after you have currentUser.uid)
 const peer = new Peer(currentUser.uid, {
-    host: "localhost",
+    host: "10.159.145.243",
     port: 9000,
     path: "/",
     // for cloud later:
